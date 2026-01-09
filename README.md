@@ -1,9 +1,8 @@
 # Supermail
 
-Organize emails with plain 'ol Ruby objects in a Rails application, like this:
+Organize emails with plain 'ol Ruby objects in a Rails application:
 
 ```ruby
-# ./app/email/user/welcome.rb
 class User::WelcomeEmail < ApplicationEmail
   def initialize(user:)
     @user = user
@@ -11,19 +10,44 @@ class User::WelcomeEmail < ApplicationEmail
 
   def to = @user.email
   def subject = "Welcome to Beautiful Ruby"
-  def body
-    super do
-      <<~_
-      Hi #{@user.name},
+  
+  def plain = <<~TEXT
+    Hi #{@user.name},
 
-      You're going to learn a ton at https://beautifulruby.com.
-      _
-    end
-  end
+    You're going to learn a ton at https://beautifulruby.com.
+  TEXT
+
+  def html = safe <<~HTML
+    <h1>Hi #{@user.name},</h1>
+    <p>You're going to learn a ton at <a href="https://beautifulruby.com">Beautiful Ruby</a>.</p>
+  HTML
 end
 ```
 
-Contrast that with rails ActionMailer, where you will spend 20 minutes trying to figure out how to send an email. I created this gem because I got tired of digging through Rails docs to understand how to intialize an email and send it. PORO's FTW!
+Or use ERB templates like Rails:
+
+```ruby
+# app/emails/welcome_email.rb
+class WelcomeEmail < ApplicationEmail
+  include Supermail::Rails::Rendering
+  
+  def initialize(user:)
+    @user = user
+  end
+
+  def to = @user.email
+  def subject = "Welcome!"
+  # Templates automatically resolved from app/emails/welcome_email.html.erb and .text.erb
+end
+```
+
+```erb
+<!-- app/emails/welcome_email.html.erb -->
+<h1>Hi <%= @user.name %>,</h1>
+<p>Welcome to the app!</p>
+```
+
+Contrast that with Rails ActionMailer, where you will spend 20 minutes trying to figure out how to send an email. I created this gem because I got tired of digging through Rails docs to understand how to initialize an email and send it. PORO's FTW!
 
 ## Support this project
 
@@ -46,116 +70,111 @@ Then install it in Rails.
 rails generate supermail:install
 ```
 
-This creates the `ApplicationEmail` class at `app/emails/application_email.rb` where you can customize the base for all emails, including setting defaults like the `from` address.
-
-```ruby
-class ApplicationEmail < Supermail::Rails::Base
-  def from = "website@example.com"
-  def to = nil
-  def subject = nil
-  def body
-     <<~_
-     #{yield if block_given?}
-
-     Best,
-
-     The Example.com Team
-     _
-  end
-end
-```
+This creates the `ApplicationEmail` class at `app/emails/application_email.rb`.
 
 ## Usage
 
-To generate a new email, run the following command:
+### Basic emails
 
-```bash
-rails generate supermail:email User::Welcome
-```
-
-This will create a new email class in `app/mailers/user/welcome_email.rb`.
+Define emails by overriding `to`, `from`, `subject`, `plain`, and `html` methods:
 
 ```ruby
-# ./app/email/user/welcome.rb
-class User::WelcomeEmail < ApplicationEmail
-  def body = <<~PLAIN
-    Hello there!
-  PLAIN
-end
-```
-You can customize the email by overriding the `to`, `from`, `subject`, and `body` methods.s
-
-```ruby
-# ./app/email/user/welcome.rb
-class User::WelcomeEmail < ApplicationEmail
+class WelcomeEmail < ApplicationEmail
   def initialize(user:)
     @user = user
   end
 
   def to = @user.email
-  def subject = "Welcome to the website"
-  def body
-    super do
-      <<~_
-      Hi #{@user.name},
+  def subject = "Welcome!"
+  def plain = "Welcome to the app, #{@user.name}!"
+  def html = safe "<h1>Welcome to the app, #{@user.name}!</h1>"
+end
+```
 
-      Welcome to the website We're excited to have you on board.
-      _
-    end
+- If both `plain` and `html` are defined, a multipart email is sent
+- If only `plain` is defined, a text-only email is sent
+- If only `html` is defined, an HTML-only email is sent
+
+### Wrapping content with hooks
+
+Use `before_*` and `after_*` hooks in your base class to wrap all emails:
+
+```ruby
+class ApplicationEmail < Supermail::Rails::Base
+  def from = "website@example.com"
+
+  def before_html = "<html><body>"
+  def after_html = <<~HTML
+    <p>Best,<br>The Example.com Team</p>
+    </body></html>
+  HTML
+
+  def after_plain = <<~TEXT
+
+    Best,
+    The Example.com Team
+  TEXT
+end
+```
+
+Child emails just define their content - the hooks handle the wrapping:
+
+```ruby
+class WelcomeEmail < ApplicationEmail
+  def subject = "Welcome!"
+  def plain = "Welcome to the app!"
+  def html = safe "<h1>Welcome!</h1>"
+end
+```
+
+### Using Phlex components
+
+Return any object that responds to `#call` from `html`:
+
+```ruby
+class WelcomeEmail < ApplicationEmail
+  def html = WelcomeEmailView.new(user: @user)
+end
+```
+
+### CSS inlining
+
+Override `html_body` for post-processing like CSS inlining:
+
+```ruby
+class ApplicationEmail < Supermail::Rails::Base
+  protected
+
+  def html_body
+    content = super
+    return nil unless content
+    Premailer.new(content, with_html_string: true).to_inline_css
   end
 end
 ```
 
-### Send emails from the server
-
-Then, to send the email.
+### Send emails
 
 ```ruby
-User::Welcome.new(user: User.first).deliver_now
+WelcomeEmail.new(user: User.first).deliver_now
+WelcomeEmail.new(user: User.first).deliver_later
 ```
 
-If you want to tweak the message on the fly, you can modify the message, then deliver it.
-
-```ruby
-User::Welcome.new(user: User.first).message.tap do
-  it.to << "another@example.com"
-end.deliver_now
-```
-
-### Launch the user's email client
-
-Supermail clases can be used to generate `mailto:` links with Rails helpers.
+### Generate mailto: links
 
 ```erb
-<%= link_to Support::OrderEmail.new(
-      user: current_user,
-      order: @order
-    ).mail_to s%>
+<%= link_to "Contact Support", SupportEmail.new(user: current_user).mailto %>
 ```
 
-This opens your users email client with prefilled information. A support email about an order might look like this:
+## Generators
 
-```ruby
-class Support::OrderEmail < ApplicationEmail
-  def initialize(user:, order:)
-    @user = user
-    @order = order
-  end
+Generate a new email:
 
-  def to = "support@example.com"
-  def from = @user.email
-  def subject = "Question about order #{@order.id}"
-  def body = <<~BODY
-    Hi Support,
-
-    I need help with my order #{@order.id}.
-
-    Thanks,
-
-    #{@user.name}
-  BODY
-end
+```bash
+rails generate supermail:email User::Welcome
 ```
+
+Creates `app/emails/user/welcome_email.rb`.
 
 ## Development
 

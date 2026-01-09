@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
 class <%= class_name %> < ApplicationEmail
-  def body = <<~PLAIN
+  def subject = "TODO"
 
-  PLAIN
+  def plain = <<~TEXT
+
+  TEXT
+
+  def html = <<~HTML
+
+  HTML
 end

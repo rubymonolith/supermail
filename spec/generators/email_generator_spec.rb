@@ -18,7 +18,8 @@ RSpec.describe Supermail::EmailGenerator, type: :generator do
     describe "app/emails/user/welcome_email.rb" do
       subject { File.read(EMAIL_DESTINATION_PATH.join("app/emails/user/welcome_email.rb")) }
       it { is_expected.to match(/class User::WelcomeEmail < ApplicationEmail/) }
-      it { is_expected.to match(/def body = <<~PLAIN/) }
+      it { is_expected.to match(/def plain = <<~TEXT/) }
+      it { is_expected.to match(/def html = <<~HTML/) }
     end
   end
 
@@ -28,7 +29,8 @@ RSpec.describe Supermail::EmailGenerator, type: :generator do
     describe "app/emails/welcome_email.rb" do
       subject { File.read(EMAIL_DESTINATION_PATH.join("app/emails/welcome_email.rb")) }
       it { is_expected.to match(/class WelcomeEmail < ApplicationEmail/) }
-      it { is_expected.to match(/def body = <<~PLAIN/) }
+      it { is_expected.to match(/def plain = <<~TEXT/) }
+      it { is_expected.to match(/def html = <<~HTML/) }
     end
   end
 

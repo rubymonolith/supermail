@@ -1,13 +1,16 @@
 class ApplicationEmail < Supermail::Rails::Base
   def from = "website@example.com"
 
-  def body
-     <<~_
-     #{yield if block_given?}
+  def before_html = "<html><body>"
 
-     Best,
+  def after_html = <<~HTML
+    <p>Best,<br>The Example.com Team</p>
+    </body></html>
+  HTML
 
-     The Example.com Team
-     _
-  end
+  def after_plain = <<~TEXT
+
+    Best,
+    The Example.com Team
+  TEXT
 end
